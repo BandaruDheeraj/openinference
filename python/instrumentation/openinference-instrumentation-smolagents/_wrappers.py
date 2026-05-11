@@ -46,3 +46,6 @@ class NonRecordingSpan:
 span = NonRecordingSpan()
 if not span.is_recording():
     print("Span is not recording, handling gracefully.")
+
+    # New defensive handling for the case when span is not recording
+    print("Span is dropped, no further action required.")
