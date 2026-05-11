@@ -1,11 +1,10 @@
 from opentelemetry.trace import NonRecordingSpan
 
-class SmolagentsInstrumentor:
-    # ... existing code ...
+# Other imports...
 
-    def _finalize_step_span(self, span):
-        # Guard against NonRecordingSpan
-        if isinstance(span, NonRecordingSpan):
-            return
-        if span.status.status_code != trace_api.StatusCode.ERROR:  # type: ignore[attr-defined]
-            # ... existing logic ...
+def _finalize_step_span(span):
+    # Guard against NonRecordingSpan
+    if isinstance(span, NonRecordingSpan):
+        return
+    if span.status.status_code != trace_api.StatusCode.ERROR:  # type: ignore[attr-defined]
+        # Existing logic...
