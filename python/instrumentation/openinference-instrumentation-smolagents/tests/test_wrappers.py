@@ -1,6 +1,6 @@
 import unittest
-from opentelemetry.trace import NonRecordingSpan
 from openinference.instrumentation.smolagents._wrappers import _finalize_step_span
+from opentelemetry.trace import NonRecordingSpan
 
 
 class TestFinalizeStepSpan(unittest.TestCase):
