@@ -243,6 +243,9 @@ def _finalize_step_span(
     if observations is not None:
         span.set_attribute(OUTPUT_VALUE, str(observations))
 
+    if not span.is_recording():
+        return
+
     if span.status.status_code != trace_api.StatusCode.ERROR:  # type: ignore[attr-defined]
         error = getattr(step_log, "error", None)
         if error is None:
@@ -563,8 +566,7 @@ class _ToolCallWrapper:
     def __init__(self, tracer: trace_api.Tracer) -> None:
         self._tracer = tracer
 
-    def __call__(
-        self,
+    def __call__(self,
         wrapped: Callable[..., Any],
         instance: Any,
         args: Tuple[Any, ...],
