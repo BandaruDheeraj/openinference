@@ -208,13 +208,8 @@ class _RunWrapper:
                 span.set_attribute(OUTPUT_VALUE, str(agent_output))
                 # Record token usage metadata
                 span.set_attribute(LLM_TOKEN_COUNT_PROMPT, agent.monitor.total_input_token_count)
-                span.set_attribute(
-                    LLM_TOKEN_COUNT_COMPLETION, agent.monitor.total_output_token_count
-                )
-                span.set_attribute(
-                    LLM_TOKEN_COUNT_TOTAL,
-                    agent.monitor.total_input_token_count + agent.monitor.total_output_token_count,
-                )
+                span.set_attribute(LLM_TOKEN_COUNT_COMPLETION, agent.monitor.total_output_token_count)
+                span.set_attribute(LLM_TOKEN_COUNT_TOTAL, agent.monitor.total_input_token_count + agent.monitor.total_output_token_count)
                 return agent_output
 
             except Exception as e:
@@ -243,7 +238,7 @@ def _finalize_step_span(
     if observations is not None:
         span.set_attribute(OUTPUT_VALUE, str(observations))
 
-    if span.status.status_code != trace_api.StatusCode.ERROR:  # type: ignore[attr-defined]
+    if isinstance(span, ReadableSpan) and span.status.status_code != trace_api.StatusCode.ERROR:
         error = getattr(step_log, "error", None)
         if error is None:
             span.set_status(trace_api.StatusCode.OK)
@@ -563,13 +558,7 @@ class _ToolCallWrapper:
     def __init__(self, tracer: trace_api.Tracer) -> None:
         self._tracer = tracer
 
-    def __call__(
-        self,
-        wrapped: Callable[..., Any],
-        instance: Any,
-        args: Tuple[Any, ...],
-        kwargs: Mapping[str, Any],
-    ) -> Any:
+    def __call__(self, wrapped: Callable[..., Any], instance: Any, args: Tuple[Any, ...], kwargs: Mapping[str, Any]) -> Any:
         if context_api.get_value(context_api._SUPPRESS_INSTRUMENTATION_KEY):
             return wrapped(*args, **kwargs)
         span_name = f"{instance.__class__.__name__}"
