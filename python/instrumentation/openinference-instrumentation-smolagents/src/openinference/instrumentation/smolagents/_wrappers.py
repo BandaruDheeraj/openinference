@@ -120,6 +120,9 @@ class _RunWrapper:
         arguments = _bind_arguments(wrapped, *args, **kwargs)
 
         # Start parent span for the full run
+        if not getattr(agent, 'span', None) or not agent.span.is_recording():
+            return wrapped(*args, **kwargs)
+
         span = self._tracer.start_span(
             span_name,
             attributes=dict(
