@@ -8,11 +8,11 @@ repr (e.g. "MyModel(field='value')") instead of proper JSON.
 
 The fix: _content_to_str helper checks hasattr(content, 'model_dump_json') first and
 calls content.model_dump_json() before falling back to str().
+
+This test uses a duck-typed mock (no pydantic import needed) to verify the fix.
 """
 import json
 import types
-
-from pydantic import BaseModel
 
 from openinference.instrumentation.agno._workflow_wrapper import (
     _content_to_str,
@@ -20,14 +20,24 @@ from openinference.instrumentation.agno._workflow_wrapper import (
 )
 
 
-class _MyContent(BaseModel):
-    message: str
-    value: int
+class _FakePydanticModel:
+    """Duck-typed mock that behaves like a Pydantic BaseModel with model_dump_json."""
+
+    def __init__(self, message: str, value: int) -> None:
+        self._message = message
+        self._value = value
+
+    def model_dump_json(self) -> str:
+        return json.dumps({"message": self._message, "value": self._value})
+
+    def __str__(self) -> str:
+        # Simulate Pydantic's repr-style __str__ (the buggy output)
+        return f"FakePydanticModel(message='{self._message}', value={self._value})"
 
 
 def test_repro():
-    """_extract_output must serialize Pydantic content as JSON, not Python repr."""
-    content = _MyContent(message="hello", value=42)
+    """_extract_output must serialize Pydantic-like content as JSON, not Python repr."""
+    content = _FakePydanticModel(message="hello", value=42)
     response = types.SimpleNamespace(content=content)
 
     result = _extract_output(response)
@@ -35,7 +45,7 @@ def test_repro():
     # The result must be valid JSON
     parsed = json.loads(result)
     assert parsed == {"message": "hello", "value": 42}, (
-        f"Expected JSON dict, got: {parsed!r}"
+        f"Expected JSON dict {{message: hello, value: 42}}, got: {parsed!r}"
     )
 
     # The result must match model_dump_json() output
@@ -52,9 +62,9 @@ def test_repro():
     )
 
 
-def test_content_to_str_pydantic():
-    """_content_to_str must use model_dump_json for Pydantic models."""
-    content = _MyContent(message="world", value=99)
+def test_content_to_str_pydantic_like():
+    """_content_to_str must use model_dump_json for objects that have it."""
+    content = _FakePydanticModel(message="world", value=99)
     result = _content_to_str(content)
 
     expected_json = content.model_dump_json()
