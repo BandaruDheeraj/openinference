@@ -589,3 +589,87 @@ class TestWorkflowRunId:
         )
         assert workflow_span is not None
         assert workflow_span.get("agno.run.id") == "RUN-ASYNC-STREAM-1"
+
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for issue #62: _extract_output must serialize Pydantic
+# BaseModel content via model_dump_json(), not Python repr (str()).
+# ---------------------------------------------------------------------------
+
+import json
+import types
+
+from pydantic import BaseModel
+
+from openinference.instrumentation.agno._workflow_wrapper import (
+    _content_to_str,
+    _extract_output,
+)
+
+
+class _SampleModel(BaseModel):
+    field: str
+    value: int
+
+
+class TestExtractOutputPydanticContent:
+    """_extract_output must produce valid JSON for Pydantic BaseModel content."""
+
+    def test_extract_output_pydantic_content_is_valid_json(self) -> None:
+        """When response.content is a Pydantic model, result must be valid JSON."""
+        content = _SampleModel(field="hello", value=42)
+        response = types.SimpleNamespace(content=content)
+
+        result = _extract_output(response)
+
+        # Must be valid JSON
+        parsed = json.loads(result)
+        assert parsed == {"field": "hello", "value": 42}
+
+    def test_extract_output_pydantic_content_equals_model_dump_json(self) -> None:
+        """Result must equal content.model_dump_json(), not str(content)."""
+        content = _SampleModel(field="hello", value=42)
+        response = types.SimpleNamespace(content=content)
+
+        result = _extract_output(response)
+        expected = content.model_dump_json()
+
+        assert result == expected, (
+            f"Expected model_dump_json() output {expected!r}, got {result!r}. "
+            "This indicates str(content) (Python repr) was returned instead of JSON."
+        )
+
+    def test_extract_output_pydantic_content_not_repr(self) -> None:
+        """Result must NOT be the Python repr string produced by str(content)."""
+        content = _SampleModel(field="hello", value=42)
+        response = types.SimpleNamespace(content=content)
+
+        result = _extract_output(response)
+        python_repr = str(content)
+
+        assert result != python_repr, (
+            f"_extract_output returned Python repr {python_repr!r} instead of JSON. "
+            "The model_dump_json() fix is not working."
+        )
+
+    def test_extract_output_plain_string_content_unchanged(self) -> None:
+        """Plain string content must still be returned as-is."""
+        response = types.SimpleNamespace(content="plain text output")
+        result = _extract_output(response)
+        assert result == "plain text output"
+
+    def test_content_to_str_pydantic_model_returns_json(self) -> None:
+        """_content_to_str must return model_dump_json() for Pydantic models."""
+        content = _SampleModel(field="test", value=99)
+        result = _content_to_str(content)
+        assert result == content.model_dump_json()
+        # Also verify it's valid JSON
+        parsed = json.loads(result)
+        assert parsed == {"field": "test", "value": 99}
+
+    def test_content_to_str_plain_string_unchanged(self) -> None:
+        """_content_to_str must return str() for non-Pydantic values."""
+        assert _content_to_str("hello") == "hello"
+        assert _content_to_str(42) == "42"
+        assert _content_to_str(None) == "None"

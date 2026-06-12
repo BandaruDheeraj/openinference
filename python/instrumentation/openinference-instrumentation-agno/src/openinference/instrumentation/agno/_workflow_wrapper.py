@@ -73,6 +73,16 @@ def _get_input_from_args(arguments: Mapping[str, Any]) -> str:
     return ""
 
 
+def _content_to_str(content: Any) -> str:
+    """Serialize a content value to string, using model_dump_json for Pydantic models."""
+    if hasattr(content, "model_dump_json"):
+        try:
+            return str(content.model_dump_json())
+        except Exception:
+            pass
+    return str(content)
+
+
 def _extract_output(response: Any) -> str:
     """Extract output from workflow/step response."""
     if response is None:
@@ -80,7 +90,7 @@ def _extract_output(response: Any) -> str:
     if isinstance(response, str):
         return response
     if hasattr(response, "content"):
-        return str(response.content)
+        return _content_to_str(response.content)
     if hasattr(response, "model_dump_json"):
         try:
             return str(response.model_dump_json())
@@ -921,7 +931,7 @@ class _ParallelWrapper:
                         context_api.detach(ctx_token)
 
                 if hasattr(response, "content") and response.content:
-                    accumulated_output.append(str(response.content))
+                    accumulated_output.append(_content_to_str(response.content))
                 yield response
 
             span.set_status(trace_api.StatusCode.OK)
@@ -1065,7 +1075,7 @@ class _ParallelWrapper:
                         context_api.detach(ctx_token)
 
                 if hasattr(response, "content") and response.content:
-                    accumulated_output.append(str(response.content))
+                    accumulated_output.append(_content_to_str(response.content))
                 yield response
 
             span.set_status(trace_api.StatusCode.OK)
