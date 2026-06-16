@@ -3,7 +3,7 @@ import json
 from openinference.instrumentation.openllmetry._span_processor import _map_generic_span
 
 
-def test_repro():
+def test_repro() -> None:
     tool_input_envelope = json.dumps(
         {
             "input_str": "some string",
