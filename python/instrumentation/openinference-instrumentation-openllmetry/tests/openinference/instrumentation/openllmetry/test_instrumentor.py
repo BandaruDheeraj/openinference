@@ -16,6 +16,7 @@ from opentelemetry.util.types import AttributeValue
 from openinference.instrumentation.openllmetry import OpenInferenceSpanProcessor
 from openinference.instrumentation.openllmetry._span_processor import (
     _extract_llm_provider_and_system,
+    _map_generic_span,
     _parse_messages_from_json,
 )
 from openinference.semconv.trace import (
@@ -361,7 +362,6 @@ class TestUpdatedGenAIMessageFormat:
 # ---------------------------------------------------------------------------
 # Regression tests for tool-span mapping fixes (issue #64)
 # ---------------------------------------------------------------------------
-from openinference.instrumentation.openllmetry._span_processor import _map_generic_span
 
 
 class TestToolSpanMapping:

@@ -1,4 +1,5 @@
 import json
+
 from openinference.instrumentation.openllmetry._span_processor import _map_generic_span
 
 
@@ -34,7 +35,8 @@ def test_repro():
         f"for tool spans. Got keys: {list(result.keys())}"
     )
     assert result["tool.name"] == "my_calculator_tool", (
-        f"REPRO_BUG_SENTINEL: tool.name should be 'my_calculator_tool', got {result.get('tool.name')}"
+        "REPRO_BUG_SENTINEL: tool.name should be 'my_calculator_tool', "
+        f"got {result.get('tool.name')}"
     )
 
     # 2. Check that input.value is unwrapped from the 'inputs' sub-dict
