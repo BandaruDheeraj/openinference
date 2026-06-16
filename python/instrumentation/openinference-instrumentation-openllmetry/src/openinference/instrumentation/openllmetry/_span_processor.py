@@ -100,21 +100,45 @@ def _map_generic_span(attrs: Dict[str, Any]) -> Dict[str, Any]:
 
     mapped: Dict[str, Any] = {"openinference.span.kind": kind_val}
 
+    is_tool = raw_kind == TraceloopSpanKindValues.TOOL.value
+
+    # For tool spans, set tool.name from traceloop.entity.name
+    if is_tool:
+        entity_name = attrs.get(SpanAttributes.TRACELOOP_ENTITY_NAME)
+        if entity_name is not None:
+            mapped[sc.SpanAttributes.TOOL_NAME] = entity_name
+
     input_raw = attrs.get(SpanAttributes.TRACELOOP_ENTITY_INPUT)
     if input_raw is not None:
+        input_val = _as_json_str(input_raw)
+        if is_tool:
+            try:
+                parsed = json.loads(input_val) if isinstance(input_val, str) else input_val
+                if isinstance(parsed, dict) and "inputs" in parsed:
+                    input_val = json.dumps(parsed["inputs"], separators=(",", ":"))
+            except Exception:
+                pass
         mapped.update(
             {
                 "input.mime_type": "application/json",
-                "input.value": _as_json_str(input_raw),
+                "input.value": input_val,
             }
         )
 
     output_raw = attrs.get(SpanAttributes.TRACELOOP_ENTITY_OUTPUT)
     if output_raw is not None:
+        output_val = _as_json_str(output_raw)
+        if is_tool:
+            try:
+                parsed = json.loads(output_val) if isinstance(output_val, str) else output_val
+                if isinstance(parsed, dict) and "output" in parsed:
+                    output_val = _as_json_str(parsed["output"])
+            except Exception:
+                pass
         mapped.update(
             {
                 "output.mime_type": "application/json",
-                "output.value": _as_json_str(output_raw),
+                "output.value": output_val,
             }
         )
 

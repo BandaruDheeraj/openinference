@@ -353,3 +353,96 @@ class TestUpdatedGenAIMessageFormat:
         assert (
             attributes[SpanAttributes.LLM_PROVIDER] == OpenInferenceLLMProviderValues.OPENAI.value
         )
+
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for tool-span mapping fixes (issue #64)
+# ---------------------------------------------------------------------------
+from openinference.instrumentation.openllmetry._span_processor import _map_generic_span
+
+
+class TestToolSpanMapping:
+    """Regression tests for _map_generic_span() tool-span fixes (issue #64)."""
+
+    def test_tool_span_sets_tool_name_and_unwraps_io(self) -> None:
+        """tool.name is set, input.value is unwrapped from 'inputs', output.value from 'output'."""
+        input_envelope = json.dumps({
+            "input_str": "city=Paris",
+            "tags": [],
+            "metadata": {},
+            "inputs": {"city": "Paris"},
+            "kwargs": {"name": "get_weather"},
+        })
+        output_envelope = json.dumps({
+            "output": '{"city": "Paris", "temp_c": 21, "condition": "sunny"}',
+            "kwargs": {"name": "get_weather"},
+        })
+
+        attrs = {
+            "traceloop.span.kind": "tool",
+            "traceloop.entity.name": "get_weather",
+            "traceloop.entity.input": input_envelope,
+            "traceloop.entity.output": output_envelope,
+        }
+
+        result = _map_generic_span(attrs)
+
+        # (1) tool.name must be set from traceloop.entity.name
+        assert result.get("tool.name") == "get_weather"
+
+        # (2) input.value must be the unwrapped 'inputs' sub-dict, not the full envelope
+        input_val = result.get("input.value", "")
+        parsed_input = json.loads(input_val) if isinstance(input_val, str) else input_val
+        assert parsed_input == {"city": "Paris"}
+
+        # (3) output.value must be the unwrapped 'output' field, not the full envelope
+        output_val = result.get("output.value", "")
+        assert "kwargs" not in output_val
+        assert "city" in output_val  # the actual result JSON is preserved
+
+    def test_tool_span_fallback_when_no_envelope_keys(self) -> None:
+        """When the input/output JSON lacks 'inputs'/'output' keys, fall back to verbatim copy."""
+        plain_input = json.dumps({"arg": "value"})
+        plain_output = json.dumps({"result": "done"})
+
+        attrs = {
+            "traceloop.span.kind": "tool",
+            "traceloop.entity.name": "plain_tool",
+            "traceloop.entity.input": plain_input,
+            "traceloop.entity.output": plain_output,
+        }
+
+        result = _map_generic_span(attrs)
+
+        # tool.name still set
+        assert result.get("tool.name") == "plain_tool"
+
+        # input.value falls back to verbatim (no 'inputs' key in envelope)
+        assert json.loads(result["input.value"]) == {"arg": "value"}
+
+        # output.value falls back to verbatim (no 'output' key in envelope)
+        assert json.loads(result["output.value"]) == {"result": "done"}
+
+    def test_non_tool_span_unaffected(self) -> None:
+        """workflow spans must NOT have tool.name set and must copy input/output verbatim."""
+        workflow_input = json.dumps({"inputs": {"question": "hello"}, "kwargs": {}})
+        workflow_output = json.dumps({"output": "world", "kwargs": {}})
+
+        attrs = {
+            "traceloop.span.kind": "workflow",
+            "traceloop.entity.name": "my_workflow",
+            "traceloop.entity.input": workflow_input,
+            "traceloop.entity.output": workflow_output,
+        }
+
+        result = _map_generic_span(attrs)
+
+        # tool.name must NOT be set for workflow spans
+        assert "tool.name" not in result
+
+        # input.value must be the verbatim envelope (not unwrapped)
+        assert json.loads(result["input.value"]) == json.loads(workflow_input)
+
+        # output.value must be the verbatim envelope (not unwrapped)
+        assert json.loads(result["output.value"]) == json.loads(workflow_output)
