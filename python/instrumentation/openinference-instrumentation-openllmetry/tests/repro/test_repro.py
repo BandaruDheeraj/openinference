@@ -3,17 +3,21 @@ from openinference.instrumentation.openllmetry._span_processor import _map_gener
 
 
 def test_repro():
-    tool_input_envelope = json.dumps({
-        "input_str": "some string",
-        "tags": ["tag1"],
-        "metadata": {},
-        "inputs": {"query": "what is 2+2?"},
-        "kwargs": {},
-    })
-    tool_output_envelope = json.dumps({
-        "output": "4",
-        "kwargs": {},
-    })
+    tool_input_envelope = json.dumps(
+        {
+            "input_str": "some string",
+            "tags": ["tag1"],
+            "metadata": {},
+            "inputs": {"query": "what is 2+2?"},
+            "kwargs": {},
+        }
+    )
+    tool_output_envelope = json.dumps(
+        {
+            "output": "4",
+            "kwargs": {},
+        }
+    )
 
     attrs = {
         "traceloop.span.kind": "tool",

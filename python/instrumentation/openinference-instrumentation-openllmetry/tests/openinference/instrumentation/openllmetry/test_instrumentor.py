@@ -88,23 +88,16 @@ class TestOpenLLMetryInstrumentor:
 
         # Input / Output
         assert isinstance(attributes[SpanAttributes.INPUT_VALUE], str)
-        assert (
-            attributes[SpanAttributes.INPUT_MIME_TYPE]
-            == OpenInferenceMimeTypeValues.JSON.value
-        )
+        assert attributes[SpanAttributes.INPUT_MIME_TYPE] == OpenInferenceMimeTypeValues.JSON.value
         assert isinstance(attributes[SpanAttributes.OUTPUT_VALUE], str)
-        assert (
-            attributes[SpanAttributes.OUTPUT_MIME_TYPE]
-            == OpenInferenceMimeTypeValues.JSON.value
-        )
+        assert attributes[SpanAttributes.OUTPUT_MIME_TYPE] == OpenInferenceMimeTypeValues.JSON.value
 
         # LLM identity
         assert attributes[SpanAttributes.LLM_MODEL_NAME] == "gpt-4.1"
         # gen_ai.system is deprecated; latest OpenLLMetry only emits gen_ai.provider.name
         if SpanAttributes.LLM_SYSTEM in attributes:
             assert (
-                attributes[SpanAttributes.LLM_SYSTEM]
-                == OpenInferenceLLMSystemValues.OPENAI.value
+                attributes[SpanAttributes.LLM_SYSTEM] == OpenInferenceLLMSystemValues.OPENAI.value
             )
         assert isinstance(attributes[SpanAttributes.LLM_INVOCATION_PARAMETERS], str)
         total_tokens = attributes.get(SpanAttributes.LLM_TOKEN_COUNT_TOTAL)
@@ -225,9 +218,7 @@ class TestUpdatedGenAIMessageFormat:
     """Tests for the updated gen_ai.input/output.messages format (OTel GenAI semconv 0.5.1+)."""
 
     def test_parse_messages_from_json_simple(self) -> None:
-        raw = json.dumps(
-            [{"role": "user", "parts": [{"type": "text", "content": "Hello"}]}]
-        )
+        raw = json.dumps([{"role": "user", "parts": [{"type": "text", "content": "Hello"}]}])
         messages, finish_reasons = _parse_messages_from_json(raw)
         assert len(messages) == 1
         assert messages[0]["role"] == "user"
@@ -289,8 +280,7 @@ class TestUpdatedGenAIMessageFormat:
         assert attributes[SpanAttributes.LLM_TOKEN_COUNT_COMPLETION] == 5
         assert attributes[SpanAttributes.LLM_TOKEN_COUNT_TOTAL] == 15
         assert (
-            attributes[SpanAttributes.LLM_PROVIDER]
-            == OpenInferenceLLMProviderValues.OPENAI.value
+            attributes[SpanAttributes.LLM_PROVIDER] == OpenInferenceLLMProviderValues.OPENAI.value
         )
 
     def test_span_processor_with_json_message_format(self) -> None:
@@ -364,8 +354,7 @@ class TestUpdatedGenAIMessageFormat:
         # so LLM_SYSTEM is not set for new-format spans.
         assert SpanAttributes.LLM_SYSTEM not in attributes
         assert (
-            attributes[SpanAttributes.LLM_PROVIDER]
-            == OpenInferenceLLMProviderValues.OPENAI.value
+            attributes[SpanAttributes.LLM_PROVIDER] == OpenInferenceLLMProviderValues.OPENAI.value
         )
 
 
@@ -410,9 +399,7 @@ class TestToolSpanMapping:
 
         # (2) input.value must be the unwrapped 'inputs' sub-dict, not the full envelope
         input_val = result.get("input.value", "")
-        parsed_input = (
-            json.loads(input_val) if isinstance(input_val, str) else input_val
-        )
+        parsed_input = json.loads(input_val) if isinstance(input_val, str) else input_val
         assert parsed_input == {"city": "Paris"}
 
         # (3) output.value must be the unwrapped 'output' field, not the full envelope
