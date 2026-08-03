@@ -582,3 +582,164 @@ class TestToolSpanMapping:
         assert SpanAttributes.TOOL_NAME not in attributes
         assert attributes[SpanAttributes.INPUT_VALUE] == entity_input
         assert attributes[SpanAttributes.OUTPUT_VALUE] == entity_output
+
+
+
+class TestRetrieverSpanMapping:
+    """Tests for the OpenLLMetry/LangChain RETRIEVER span attributes mapping."""
+
+    def test_retriever_span_vector_db_retrieve_produces_retriever_kind(self) -> None:
+        """A task span with gen_ai.operation.name='vector_db_retrieve' must map to RETRIEVER."""
+        in_memory_span_exporter = InMemorySpanExporter()
+        tracer_provider = TracerProvider()
+        tracer_provider.add_span_processor(OpenInferenceSpanProcessor())
+        tracer_provider.add_span_processor(SimpleSpanProcessor(in_memory_span_exporter))
+
+        tracer = tracer_provider.get_tracer(__name__)
+
+        entity_input = json.dumps({"query": "What is the capital of France?", "tags": [], "metadata": {}})
+        entity_output = json.dumps(
+            {
+                "documents": [
+                    {"page_content": "Paris is the capital of France.", "metadata": {"source": "wiki"}},
+                    {"page_content": "The Eiffel Tower is in Paris.", "metadata": {"source": "wiki"}},
+                ]
+            }
+        )
+
+        with tracer.start_as_current_span("retriever") as span:
+            span.set_attribute("traceloop.span.kind", "task")
+            span.set_attribute("gen_ai.operation.name", "vector_db_retrieve")
+            span.set_attribute("traceloop.entity.name", "retriever")
+            span.set_attribute("traceloop.entity.input", entity_input)
+            span.set_attribute("traceloop.entity.output", entity_output)
+
+        spans = in_memory_span_exporter.get_finished_spans()
+        assert len(spans) == 1
+        attributes = dict(cast(Mapping[str, AttributeValue], spans[0].attributes))
+
+        assert (
+            attributes[SpanAttributes.OPENINFERENCE_SPAN_KIND]
+            == OpenInferenceSpanKindValues.RETRIEVER.value
+        )
+
+    def test_retriever_span_retrieval_operation_name_produces_retriever_kind(self) -> None:
+        """A task span with gen_ai.operation.name='retrieval' must also map to RETRIEVER."""
+        in_memory_span_exporter = InMemorySpanExporter()
+        tracer_provider = TracerProvider()
+        tracer_provider.add_span_processor(OpenInferenceSpanProcessor())
+        tracer_provider.add_span_processor(SimpleSpanProcessor(in_memory_span_exporter))
+
+        tracer = tracer_provider.get_tracer(__name__)
+
+        entity_input = json.dumps({"query": "Who wrote Hamlet?"})
+        entity_output = json.dumps(
+            {"documents": [{"page_content": "Hamlet was written by Shakespeare.", "metadata": {}}]}
+        )
+
+        with tracer.start_as_current_span("retriever") as span:
+            span.set_attribute("traceloop.span.kind", "task")
+            span.set_attribute("gen_ai.operation.name", "retrieval")
+            span.set_attribute("traceloop.entity.input", entity_input)
+            span.set_attribute("traceloop.entity.output", entity_output)
+
+        spans = in_memory_span_exporter.get_finished_spans()
+        assert len(spans) == 1
+        attributes = dict(cast(Mapping[str, AttributeValue], spans[0].attributes))
+
+        assert (
+            attributes[SpanAttributes.OPENINFERENCE_SPAN_KIND]
+            == OpenInferenceSpanKindValues.RETRIEVER.value
+        )
+
+    def test_retriever_span_query_extracted_as_text_plain_input(self) -> None:
+        """The query from the Traceloop envelope must be set as input.value with text/plain mime type."""
+        in_memory_span_exporter = InMemorySpanExporter()
+        tracer_provider = TracerProvider()
+        tracer_provider.add_span_processor(OpenInferenceSpanProcessor())
+        tracer_provider.add_span_processor(SimpleSpanProcessor(in_memory_span_exporter))
+
+        tracer = tracer_provider.get_tracer(__name__)
+
+        entity_input = json.dumps({"query": "What is the capital of France?", "tags": [], "metadata": {}})
+        entity_output = json.dumps(
+            {"documents": [{"page_content": "Paris is the capital of France.", "metadata": {}}]}
+        )
+
+        with tracer.start_as_current_span("retriever") as span:
+            span.set_attribute("traceloop.span.kind", "task")
+            span.set_attribute("gen_ai.operation.name", "vector_db_retrieve")
+            span.set_attribute("traceloop.entity.input", entity_input)
+            span.set_attribute("traceloop.entity.output", entity_output)
+
+        spans = in_memory_span_exporter.get_finished_spans()
+        assert len(spans) == 1
+        attributes = dict(cast(Mapping[str, AttributeValue], spans[0].attributes))
+
+        assert attributes[SpanAttributes.INPUT_VALUE] == "What is the capital of France?"
+        assert attributes[SpanAttributes.INPUT_MIME_TYPE] == OpenInferenceMimeTypeValues.TEXT.value
+
+    def test_retriever_span_documents_mapped_to_retrieval_attributes(self) -> None:
+        """Documents from the output envelope must be mapped to retrieval.documents.* attributes."""
+        in_memory_span_exporter = InMemorySpanExporter()
+        tracer_provider = TracerProvider()
+        tracer_provider.add_span_processor(OpenInferenceSpanProcessor())
+        tracer_provider.add_span_processor(SimpleSpanProcessor(in_memory_span_exporter))
+
+        tracer = tracer_provider.get_tracer(__name__)
+
+        entity_input = json.dumps({"query": "What is the capital of France?"})
+        entity_output = json.dumps(
+            {
+                "documents": [
+                    {"page_content": "Paris is the capital of France.", "metadata": {"source": "wiki", "page": 1}},
+                    {"page_content": "The Eiffel Tower is in Paris.", "metadata": {"source": "wiki", "page": 2}},
+                ]
+            }
+        )
+
+        with tracer.start_as_current_span("retriever") as span:
+            span.set_attribute("traceloop.span.kind", "task")
+            span.set_attribute("gen_ai.operation.name", "vector_db_retrieve")
+            span.set_attribute("traceloop.entity.input", entity_input)
+            span.set_attribute("traceloop.entity.output", entity_output)
+
+        spans = in_memory_span_exporter.get_finished_spans()
+        assert len(spans) == 1
+        attributes = dict(cast(Mapping[str, AttributeValue], spans[0].attributes))
+
+        assert attributes["retrieval.documents.0.document.content"] == "Paris is the capital of France."
+        assert attributes["retrieval.documents.0.document.metadata"] == json.dumps(
+            {"source": "wiki", "page": 1}, separators=(",", ":")
+        )
+        assert attributes["retrieval.documents.1.document.content"] == "The Eiffel Tower is in Paris."
+        assert attributes["retrieval.documents.1.document.metadata"] == json.dumps(
+            {"source": "wiki", "page": 2}, separators=(",", ":")
+        )
+
+    def test_task_span_without_retriever_operation_name_still_maps_to_tool(self) -> None:
+        """Regression guard: a task span with a non-retriever gen_ai.operation.name maps to TOOL."""
+        in_memory_span_exporter = InMemorySpanExporter()
+        tracer_provider = TracerProvider()
+        tracer_provider.add_span_processor(OpenInferenceSpanProcessor())
+        tracer_provider.add_span_processor(SimpleSpanProcessor(in_memory_span_exporter))
+
+        tracer = tracer_provider.get_tracer(__name__)
+
+        entity_input = json.dumps({"inputs": {"city": "Paris"}})
+        entity_output = json.dumps({"output": "sunny"})
+
+        with tracer.start_as_current_span("some_task") as span:
+            span.set_attribute("traceloop.span.kind", "task")
+            span.set_attribute("gen_ai.operation.name", "some_other_operation")
+            span.set_attribute("traceloop.entity.input", entity_input)
+            span.set_attribute("traceloop.entity.output", entity_output)
+
+        spans = in_memory_span_exporter.get_finished_spans()
+        assert len(spans) == 1
+        attributes = dict(cast(Mapping[str, AttributeValue], spans[0].attributes))
+
+        assert (
+            attributes[SpanAttributes.OPENINFERENCE_SPAN_KIND]
+            == OpenInferenceSpanKindValues.TOOL.value
+        )

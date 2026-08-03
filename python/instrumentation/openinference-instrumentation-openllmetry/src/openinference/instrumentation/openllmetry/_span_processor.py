@@ -122,6 +122,9 @@ def _unwrap_tool_io(input_raw: Any, output_raw: Any) -> Tuple[Optional[Any], Any
     return tool_args, tool_result, tool_args
 
 
+_RETRIEVER_OPERATION_NAMES: frozenset = frozenset({"vector_db_retrieve", "retrieval"})
+
+
 def _map_generic_span(attrs: Dict[str, Any], span_name: Optional[str] = None) -> Dict[str, Any]:
     """
     Convert TraceLoop 'workflow' / 'task' / 'agent' / 'tool' spans
@@ -130,10 +133,67 @@ def _map_generic_span(attrs: Dict[str, Any], span_name: Optional[str] = None) ->
     raw_kind = str(attrs.get(SpanAttributes.TRACELOOP_SPAN_KIND, "unknown")).lower()
     kind_val = _SPAN_KIND_MAPPING.get(raw_kind, sc.OpenInferenceSpanKindValues.UNKNOWN.value)
 
-    mapped: Dict[str, Any] = {"openinference.span.kind": kind_val}
-
     input_raw = attrs.get(SpanAttributes.TRACELOOP_ENTITY_INPUT)
     output_raw = attrs.get(SpanAttributes.TRACELOOP_ENTITY_OUTPUT)
+
+    # ------------------------------------------------------------------
+    # Retriever branch: detect LangChain retriever spans by operation name
+    # (must be checked BEFORE the is_tool branch because retriever spans
+    # also carry traceloop.span.kind='task' which maps to TOOL by default)
+    # ------------------------------------------------------------------
+    operation_name = str(attrs.get("gen_ai.operation.name", "")).lower()
+    if operation_name in _RETRIEVER_OPERATION_NAMES:
+        kind_val = sc.OpenInferenceSpanKindValues.RETRIEVER.value
+        mapped: Dict[str, Any] = {"openinference.span.kind": kind_val}
+
+        # Extract query from the Traceloop input envelope: {"query": "...", ...}
+        input_obj = _coerce_json_obj(input_raw)
+        if isinstance(input_obj, dict) and "query" in input_obj:
+            mapped.update(
+                {
+                    "input.mime_type": sc.OpenInferenceMimeTypeValues.TEXT.value,
+                    "input.value": str(input_obj["query"]),
+                }
+            )
+        elif input_raw is not None:
+            mapped.update(
+                {
+                    "input.mime_type": sc.OpenInferenceMimeTypeValues.JSON.value,
+                    "input.value": _as_json_str(input_raw),
+                }
+            )
+
+        # Extract documents from the Traceloop output envelope:
+        # {"documents": [{"page_content": "...", "metadata": {...}}, ...]}
+        output_obj = _coerce_json_obj(output_raw)
+        if isinstance(output_obj, dict) and "documents" in output_obj:
+            docs = output_obj["documents"]
+            if isinstance(docs, list):
+                for i, doc in enumerate(docs):
+                    if not isinstance(doc, dict):
+                        continue
+                    content = doc.get("page_content") or doc.get("content", "")
+                    metadata = doc.get("metadata", {})
+                    mapped[f"retrieval.documents.{i}.document.content"] = str(content)
+                    mapped[f"retrieval.documents.{i}.document.metadata"] = (
+                        json.dumps(metadata, separators=(",", ":"))
+                        if isinstance(metadata, (dict, list))
+                        else str(metadata)
+                    )
+        elif output_raw is not None:
+            mapped.update(
+                {
+                    "output.mime_type": sc.OpenInferenceMimeTypeValues.JSON.value,
+                    "output.value": _as_json_str(output_raw),
+                }
+            )
+
+        return mapped
+
+    # ------------------------------------------------------------------
+    # Default path for workflow / task / agent / tool spans
+    # ------------------------------------------------------------------
+    mapped = {"openinference.span.kind": kind_val}
 
     is_tool = kind_val == sc.OpenInferenceSpanKindValues.TOOL.value
     tool_args: Optional[Any] = None
