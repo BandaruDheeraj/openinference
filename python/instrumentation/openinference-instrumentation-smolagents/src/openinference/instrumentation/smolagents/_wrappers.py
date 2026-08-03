@@ -35,14 +35,16 @@ if TYPE_CHECKING:
 def _flatten(mapping: Optional[Mapping[str, Any]]) -> Iterator[Tuple[str, AttributeValue]]:
     if not mapping:
         return
-    for key, value in mapping.items():
+    # Snapshot upfront so caller-owned mapping mutations do not raise
+    # RuntimeError("dictionary changed size during iteration") while we walk it.
+    for key, value in dict(mapping).items():
         if value is None:
             continue
         if isinstance(value, Mapping):
             for sub_key, sub_value in _flatten(value):
                 yield f"{key}.{sub_key}", sub_value
         elif isinstance(value, list) and any(isinstance(item, Mapping) for item in value):
-            for index, sub_mapping in enumerate(value):
+            for index, sub_mapping in enumerate(list(value)):
                 for sub_key, sub_value in _flatten(sub_mapping):
                     yield f"{key}.{index}.{sub_key}", sub_value
         else:
