@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.68](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-langchain-v0.1.67...python-openinference-instrumentation-langchain-v0.1.68) (2026-07-30)
+
+
+### Bug Fixes
+
+* **langchain:** accept LangGraph interrupt and resume callbacks ([#3308](https://github.com/Arize-ai/openinference/issues/3308)) ([c5bbce6](https://github.com/Arize-ai/openinference/commit/c5bbce69211f9a6b4c18adc46d6295640fbdcc41))
+
+
+### Documentation
+
+* link Arize AX alongside Phoenix across all READMEs ([#3330](https://github.com/Arize-ai/openinference/issues/3330)) ([0433526](https://github.com/Arize-ai/openinference/commit/0433526b048474195b4f354e5df6bfea2db4804d))
+
+## [0.1.67](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-langchain-v0.1.66...python-openinference-instrumentation-langchain-v0.1.67) (2026-07-01)
+
+
+### Features
+
+* **langchain:** Ignore GraphInterrupt Exceptions ([#3316](https://github.com/Arize-ai/openinference/issues/3316)) ([4f10a2a](https://github.com/Arize-ai/openinference/commit/4f10a2ac72662ab5bc6d9f1293ead0c7cff784ae))
+
 ## [0.1.66](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-langchain-v0.1.65...python-openinference-instrumentation-langchain-v0.1.66) (2026-05-18)
 
 

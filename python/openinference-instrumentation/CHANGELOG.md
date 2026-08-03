@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.1.56](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-v0.1.55...python-openinference-instrumentation-v0.1.56) (2026-07-31)
+
+
+### Features
+
+* **instrumentation:** pluggable BlobUploader to externalize oversized base64 images ([#3409](https://github.com/Arize-ai/openinference/issues/3409)) ([8e46780](https://github.com/Arize-ai/openinference/commit/8e46780cc98b2471df22b568421d08f4dbf4e74a))
+
+## [0.1.55](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-v0.1.54...python-openinference-instrumentation-v0.1.55) (2026-07-30)
+
+
+### Features
+
+* **tracers:** add retriever, reranker, guardrail, evaluator decorators ([#3384](https://github.com/Arize-ai/openinference/issues/3384)) ([c38a523](https://github.com/Arize-ai/openinference/commit/c38a523eb51df74a65155e8db17703b209f52340))
+
+
+### Bug Fixes
+
+* **instrumentation:** apply base64_image_max_length to output messages too ([#3396](https://github.com/Arize-ai/openinference/issues/3396)) ([83782b2](https://github.com/Arize-ai/openinference/commit/83782b23f75765a4d245285cf89da01b3f8f3b2f))
+
+## [0.1.54](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-v0.1.53...python-openinference-instrumentation-v0.1.54) (2026-06-30)
+
+
+### Features
+
+* add support for reasoning content and signatures in attributes and types ([#3226](https://github.com/Arize-ai/openinference/issues/3226)) ([7ce4027](https://github.com/Arize-ai/openinference/commit/7ce4027d4ac6bb24bb2da0af085433cbfabb28b5))
+
 ## [0.1.53](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-v0.1.52...python-openinference-instrumentation-v0.1.53) (2026-06-02)
 
 

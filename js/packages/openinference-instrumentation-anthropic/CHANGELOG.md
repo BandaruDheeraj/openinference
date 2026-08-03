@@ -1,5 +1,33 @@
 # @arizeai/openinference-instrumentation-anthropic
 
+## 0.1.17
+
+### Patch Changes
+
+- Updated dependencies [145e3c6]
+  - @arizeai/openinference-semantic-conventions@2.6.0
+  - @arizeai/openinference-core@2.4.1
+
+## 0.1.16
+
+### Patch Changes
+
+- 15cddf4: Anthropic instrumentation now captures Claude extended thinking content in OpenInference message contents. Anthropic thinking blocks are recorded as reasoning content with their text and signature, while redacted_thinking blocks are recorded as reasoning content with their redacted data payload. This works for both streaming and non-streaming Messages responses, preserves content block ordering.
+
+## 0.1.15
+
+### Patch Changes
+
+- Updated dependencies [d0f5a88]
+  - @arizeai/openinference-core@2.4.0
+
+## 0.1.14
+
+### Patch Changes
+
+- Updated dependencies [1fe7927]
+  - @arizeai/openinference-core@2.3.0
+
 ## 0.1.13
 
 ### Patch Changes

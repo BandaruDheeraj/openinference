@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.3.0](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-google-genai-v1.2.0...python-openinference-instrumentation-google-genai-v1.3.0) (2026-07-30)
+
+
+### Features
+
+* **google-genai:** redact images in input.value from TraceConfig ([#3459](https://github.com/Arize-ai/openinference/issues/3459)) ([e8ce013](https://github.com/Arize-ai/openinference/commit/e8ce013ab6e94e11c4a0f31c3e123594ce15d082))
+
+
+### Documentation
+
+* link Arize AX alongside Phoenix across all READMEs ([#3330](https://github.com/Arize-ai/openinference/issues/3330)) ([0433526](https://github.com/Arize-ai/openinference/commit/0433526b048474195b4f354e5df6bfea2db4804d))
+
+## [1.2.0](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-google-genai-v1.1.1...python-openinference-instrumentation-google-genai-v1.2.0) (2026-06-30)
+
+
+### Features
+
+* add support for reasoning content and signatures in attributes and types ([#3226](https://github.com/Arize-ai/openinference/issues/3226)) ([7ce4027](https://github.com/Arize-ai/openinference/commit/7ce4027d4ac6bb24bb2da0af085433cbfabb28b5))
+
+## [1.1.1](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-google-genai-v1.1.0...python-openinference-instrumentation-google-genai-v1.1.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* **google_genai:** support google-genai 2.9.0 (relocated interactions resources) ([#3269](https://github.com/Arize-ai/openinference/issues/3269)) ([4ca2103](https://github.com/Arize-ai/openinference/commit/4ca210349d2b0c1c0428702061246020243dfcda))
+
 ## [1.1.0](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-google-genai-v1.0.2...python-openinference-instrumentation-google-genai-v1.1.0) (2026-06-11)
 
 

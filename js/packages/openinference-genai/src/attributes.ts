@@ -113,8 +113,29 @@ const TOOL_EXECUTION_PREFIXES = [
   ATTR_GEN_AI_TOOL_TYPE,
 ] as const;
 
+const ATTR_GEN_AI_SYSTEM_INSTRUCTIONS = "gen_ai.system_instructions" as const;
+const ATTR_GEN_AI_TOOL_DEFINITIONS = "gen_ai.tool.definitions" as const;
+const ATTR_GEN_AI_TOOL_CALL_ARGUMENTS = "gen_ai.tool.call.arguments" as const;
+const ATTR_GEN_AI_TOOL_CALL_RESULT = "gen_ai.tool.call.result" as const;
+const ATTR_GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS = "gen_ai.usage.cache_read.input_tokens" as const;
+const ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS =
+  "gen_ai.usage.cache_creation.input_tokens" as const;
+
+/**
+ * A reasoning (thinking) message part.
+ *
+ * Producers such as `@ai-sdk/otel` already emit `{ type: "reasoning", content: "..." }` parts in
+ * `gen_ai.input.messages` / `gen_ai.output.messages`, but the draft OTel GenAI message schemas the
+ * types in `__generated__` are derived from do not yet declare the part — hence the local type.
+ */
+interface ReasoningPart {
+  type: "reasoning";
+  content?: unknown;
+  [k: string]: unknown;
+}
+
 // Shared part parsing
-type AnyPart = GenAIInputMessagePart | GenAIOutputMessagePart;
+type AnyPart = GenAIInputMessagePart | GenAIOutputMessagePart | ReasoningPart;
 
 /**
  * Type guard for a GenAI chat message
@@ -127,6 +148,70 @@ const isGenAIChatMessage = (value: unknown): value is ChatMessage => {
   if (typeof value.role !== "string" || !Array.isArray(value.parts)) return false;
   if (!value.parts || !Array.isArray(value.parts)) return false;
   return true;
+};
+
+/**
+ * Normalize a GenAI tool definition into the OpenAI-style tool schema shape expected by OpenInference.
+ * @param toolDefinition - The tool definition to normalize
+ * @returns The normalized tool definition, or the original value when it cannot be normalized
+ */
+const normalizeToolDefinition = (toolDefinition: unknown): unknown => {
+  if (
+    typeof toolDefinition !== "object" ||
+    toolDefinition === null ||
+    Array.isArray(toolDefinition)
+  ) {
+    return toolDefinition;
+  }
+
+  const definition = toolDefinition as Record<string, unknown>;
+  if (typeof definition.function === "object" && definition.function !== null) {
+    return definition;
+  }
+
+  if (typeof definition.name !== "string") {
+    return definition;
+  }
+
+  const parameters = definition.parameters ?? definition.inputSchema ?? definition.input_schema;
+  const normalizedFunction: Record<string, unknown> = { name: definition.name };
+  if (typeof definition.description === "string") {
+    normalizedFunction.description = definition.description;
+  }
+  if (parameters != null) {
+    normalizedFunction.parameters = parameters;
+  }
+
+  return {
+    type: typeof definition.type === "string" ? definition.type : "function",
+    function: normalizedFunction,
+  };
+};
+
+const getSystemInstructionParts = (spanAttributes: Attributes): GenAIInputMessagePart[] | null => {
+  const systemInstructions = getString(spanAttributes[ATTR_GEN_AI_SYSTEM_INSTRUCTIONS]);
+  if (systemInstructions == null) {
+    return null;
+  }
+
+  const parsedInstructions = safelyParseJSON(systemInstructions);
+  if (Array.isArray(parsedInstructions)) {
+    const parts = parsedInstructions.flatMap((part): GenAIInputMessagePart[] => {
+      if (
+        typeof part === "object" &&
+        part !== null &&
+        "type" in part &&
+        part.type === "text" &&
+        "content" in part
+      ) {
+        return [{ type: "text", content: toStringContent(part.content) }];
+      }
+      return [];
+    });
+    return parts.length > 0 ? parts : null;
+  }
+
+  return [{ type: "text", content: systemInstructions }];
 };
 
 /**
@@ -169,6 +254,20 @@ const processMessageParts = ({
         }
         continue;
       }
+      case "reasoning": {
+        // MESSAGE_CONTENTS entry carrying the reasoning text itself, not the serialized part
+        const contentPrefix = `${msgPrefix}${SemanticConventions.MESSAGE_CONTENTS}.${contentIndex}.`;
+        set(attrs, `${contentPrefix}${SemanticConventions.MESSAGE_CONTENT_TYPE}`, "reasoning");
+        if (part.content != null) {
+          set(
+            attrs,
+            `${contentPrefix}${SemanticConventions.MESSAGE_CONTENT_TEXT}`,
+            toStringContent(part.content),
+          );
+        }
+        contentIndex += 1;
+        continue;
+      }
       case "tool_call": {
         const id = part.id ?? undefined;
         const name = part.name;
@@ -189,24 +288,46 @@ const processMessageParts = ({
         const response = toStringContent(part.response);
 
         set(attrs, `${msgPrefix}${SemanticConventions.MESSAGE_TOOL_CALL_ID}`, id);
-        const contentPrefix = `${msgPrefix}${SemanticConventions.MESSAGE_CONTENTS}.${contentIndex}.`;
-        set(attrs, `${contentPrefix}${SemanticConventions.MESSAGE_CONTENT_TYPE}`, "text");
-        set(attrs, `${contentPrefix}${SemanticConventions.MESSAGE_CONTENT_TEXT}`, response);
-        contentIndex += 1;
+        set(attrs, `${msgPrefix}${SemanticConventions.MESSAGE_CONTENT}`, response);
         continue;
       }
       default: {
-        // Generic / unknown part type: capture as JSON text content
+        // Generic / unknown part type: capture as JSON text content. Only MESSAGE_CONTENTS is
+        // written — the flat MESSAGE_CONTENT is an alternative representation of the same message,
+        // so setting both duplicates the content in consumers that render each of them.
         const genericPart = part as GenericPart;
         const genericText = toStringContent(genericPart);
         const contentPrefix = `${msgPrefix}${SemanticConventions.MESSAGE_CONTENTS}.${contentIndex}.`;
         set(attrs, `${contentPrefix}${SemanticConventions.MESSAGE_CONTENT_TYPE}`, genericPart.type);
         set(attrs, `${contentPrefix}${SemanticConventions.MESSAGE_CONTENT_TEXT}`, genericText);
-        set(attrs, `${msgPrefix}${SemanticConventions.MESSAGE_CONTENT}`, genericText);
         contentIndex += 1;
       }
     }
   }
+};
+
+/**
+ * Set OpenInference attributes for a single tool response message.
+ *
+ * GenAI can group multiple tool_call_response parts under one tool-role message;
+ * each response needs its own OpenInference message to avoid overwriting siblings.
+ * @param params - The tool response message mapping parameters
+ */
+const setToolCallResponseMessage = ({
+  attrs,
+  msgPrefix,
+  part,
+}: {
+  attrs: Attributes;
+  msgPrefix: string;
+  part: Extract<AnyPart, { type: "tool_call_response" }>;
+}): void => {
+  const id = part.id ?? undefined;
+  const response = toStringContent(part.response);
+
+  set(attrs, `${msgPrefix}${SemanticConventions.MESSAGE_ROLE}`, "tool");
+  set(attrs, `${msgPrefix}${SemanticConventions.MESSAGE_TOOL_CALL_ID}`, id);
+  set(attrs, `${msgPrefix}${SemanticConventions.MESSAGE_CONTENT}`, response);
 };
 
 /**
@@ -225,6 +346,9 @@ export const convertGenAISpanAttributesToOpenInferenceSpanAttributes = (
     mapInvocationParameters(spanAttributes),
     mapInputMessages(spanAttributes),
     mapOutputMessages(spanAttributes),
+    mapAgent(spanAttributes),
+    mapSystemInstructions(spanAttributes),
+    mapToolDefinitions(spanAttributes),
     mapTokenCounts(spanAttributes),
     mapToolExecution(spanAttributes),
     mapInputValue(spanAttributes),
@@ -241,6 +365,7 @@ export const convertGenAISpanAttributesToOpenInferenceSpanAttributes = (
 export const mapProviderAndSystem = (spanAttributes: Attributes): Attributes => {
   const attrs: Attributes = {};
   const provider = getString(spanAttributes[ATTR_GEN_AI_PROVIDER_NAME]);
+  set(attrs, SemanticConventions.LLM_SYSTEM, provider);
   set(attrs, SemanticConventions.LLM_PROVIDER, provider);
   return attrs;
 };
@@ -366,6 +491,9 @@ export const mapInputValue = (spanAttributes: Attributes): Attributes => {
     // fallback to deprecated prompt attribute if input is not present
     input = getString(spanAttributes[ATTR_GEN_AI_PROMPT]);
   }
+  if (!input) {
+    input = getString(spanAttributes[ATTR_GEN_AI_INPUT_MESSAGES]);
+  }
   // only set input value and mime type if input is present
   if (input) {
     set(attrs, SemanticConventions.INPUT_VALUE, input);
@@ -386,10 +514,70 @@ export const mapOutputValue = (spanAttributes: Attributes): Attributes => {
     // fallback to deprecated completion attribute if output is not present
     output = getString(spanAttributes[ATTR_GEN_AI_COMPLETION]);
   }
+  if (!output) {
+    output = getString(spanAttributes[ATTR_GEN_AI_OUTPUT_MESSAGES]);
+  }
   // only set output value and mime type if output is present
   if (output) {
     set(attrs, SemanticConventions.OUTPUT_VALUE, output);
     set(attrs, SemanticConventions.OUTPUT_MIME_TYPE, getMimeType(output));
+  }
+  return attrs;
+};
+
+/**
+ * Map GenAI agent attributes to OpenInference attributes.
+ * @param spanAttributes - The span attributes containing agent details
+ * @returns The mapped agent attributes
+ */
+export const mapAgent = (spanAttributes: Attributes): Attributes => {
+  const attrs: Attributes = {};
+  set(attrs, SemanticConventions.AGENT_NAME, getString(spanAttributes[ATTR_GEN_AI_AGENT_NAME]));
+  return attrs;
+};
+
+/**
+ * Map GenAI system instructions into metadata for preservation.
+ * @param spanAttributes - The span attributes containing system instructions
+ * @returns The mapped metadata attributes
+ */
+export const mapSystemInstructions = (spanAttributes: Attributes): Attributes => {
+  const attrs: Attributes = {};
+  const systemInstructions = getString(spanAttributes[ATTR_GEN_AI_SYSTEM_INSTRUCTIONS]);
+  if (systemInstructions) {
+    set(attrs, `${SemanticConventions.METADATA}.gen_ai.system_instructions`, systemInstructions);
+
+    // Only emit the synthetic system message when there are parts to put in it.
+    // mapInputMessages shifts its indexes by one on exactly this condition, so
+    // emitting here without parts would claim index 0 while the input messages
+    // still start at 0, overwriting the first message's role with "system".
+    const parts = getSystemInstructionParts(spanAttributes);
+    if (parts != null) {
+      const msgPrefix = `${SemanticConventions.LLM_INPUT_MESSAGES}.0.`;
+      set(attrs, `${msgPrefix}${SemanticConventions.MESSAGE_ROLE}`, "system");
+      processMessageParts({ attrs, msgPrefix, parts });
+    }
+  }
+  return attrs;
+};
+
+/**
+ * Map GenAI tool definitions to OpenInference LLM tool schema attributes.
+ * @param spanAttributes - The span attributes containing tool definitions
+ * @returns The mapped tool schema attributes
+ */
+export const mapToolDefinitions = (spanAttributes: Attributes): Attributes => {
+  const attrs: Attributes = {};
+  const toolDefinitions = getString(spanAttributes[ATTR_GEN_AI_TOOL_DEFINITIONS]);
+  const parsedToolDefinitions = safelyParseJSON(toolDefinitions);
+  if (Array.isArray(parsedToolDefinitions)) {
+    parsedToolDefinitions.forEach((toolDefinition, index) => {
+      set(
+        attrs,
+        `${SemanticConventions.LLM_TOOLS}.${index}.${SemanticConventions.TOOL_JSON_SCHEMA}`,
+        safelyJSONStringify(normalizeToolDefinition(toolDefinition)),
+      );
+    });
   }
   return attrs;
 };
@@ -404,13 +592,30 @@ export const mapInputMessages = (spanAttributes: Attributes): Attributes => {
   const genAIInputMessages = safelyParseJSON(spanAttributes[ATTR_GEN_AI_INPUT_MESSAGES]);
 
   if (Array.isArray(genAIInputMessages)) {
-    (genAIInputMessages as unknown[]).forEach((msg, msgIndex) => {
+    let msgIndex = getSystemInstructionParts(spanAttributes) != null ? 1 : 0;
+    (genAIInputMessages as unknown[]).forEach((msg) => {
       if (!isGenAIChatMessage(msg)) return;
+
+      const toolCallResponses = msg.parts.filter(
+        (part): part is Extract<AnyPart, { type: "tool_call_response" }> =>
+          part?.type === "tool_call_response",
+      );
+
+      if (msg.role === "tool" && toolCallResponses.length > 0) {
+        toolCallResponses.forEach((part) => {
+          const msgPrefix = `${SemanticConventions.LLM_INPUT_MESSAGES}.${msgIndex}.`;
+          setToolCallResponseMessage({ attrs, msgPrefix, part });
+          msgIndex += 1;
+        });
+        return;
+      }
+
       const msgPrefix = `${SemanticConventions.LLM_INPUT_MESSAGES}.${msgIndex}.`;
       // set the message role
       set(attrs, `${msgPrefix}${SemanticConventions.MESSAGE_ROLE}`, msg.role);
       // process and set the rest of the message parts
       processMessageParts({ attrs, msgPrefix, parts: msg.parts });
+      msgIndex += 1;
     });
   }
 
@@ -450,6 +655,10 @@ export const mapTokenCounts = (spanAttributes: Attributes): Attributes => {
   const attrs: Attributes = {};
   const inputTokens = getNumber(spanAttributes[ATTR_GEN_AI_USAGE_INPUT_TOKENS]);
   const outputTokens = getNumber(spanAttributes[ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]);
+  const cacheReadInputTokens = getNumber(spanAttributes[ATTR_GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS]);
+  const cacheCreationInputTokens = getNumber(
+    spanAttributes[ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS],
+  );
   if (typeof inputTokens === "number") {
     set(attrs, SemanticConventions.LLM_TOKEN_COUNT_PROMPT, inputTokens);
   }
@@ -458,6 +667,16 @@ export const mapTokenCounts = (spanAttributes: Attributes): Attributes => {
   }
   if (typeof inputTokens === "number" && typeof outputTokens === "number") {
     set(attrs, SemanticConventions.LLM_TOKEN_COUNT_TOTAL, inputTokens + outputTokens);
+  }
+  if (typeof cacheReadInputTokens === "number") {
+    set(attrs, SemanticConventions.LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_READ, cacheReadInputTokens);
+  }
+  if (typeof cacheCreationInputTokens === "number") {
+    set(
+      attrs,
+      SemanticConventions.LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_WRITE,
+      cacheCreationInputTokens,
+    );
   }
   return attrs;
 };
@@ -473,11 +692,21 @@ export const mapToolExecution = (spanAttributes: Attributes): Attributes => {
   const toolName = getString(spanAttributes[ATTR_GEN_AI_TOOL_NAME]);
   const toolDescription = getString(spanAttributes[ATTR_GEN_AI_TOOL_DESCRIPTION]);
   const toolCallId = getString(spanAttributes[ATTR_GEN_AI_TOOL_CALL_ID]);
+  const toolCallArguments = getString(spanAttributes[ATTR_GEN_AI_TOOL_CALL_ARGUMENTS]);
+  const toolCallResult = getString(spanAttributes[ATTR_GEN_AI_TOOL_CALL_RESULT]);
   // parse supported tool details
-  // note: while openinference can track parameters, gen_ai does not provide this information
   set(attrs, SemanticConventions.TOOL_NAME, toolName);
   set(attrs, SemanticConventions.TOOL_DESCRIPTION, toolDescription);
   set(attrs, SemanticConventions.TOOL_CALL_ID, toolCallId);
+  set(attrs, SemanticConventions.TOOL_PARAMETERS, toolCallArguments);
+  if (toolCallArguments) {
+    set(attrs, SemanticConventions.INPUT_VALUE, toolCallArguments);
+    set(attrs, SemanticConventions.INPUT_MIME_TYPE, getMimeType(toolCallArguments));
+  }
+  if (toolCallResult) {
+    set(attrs, SemanticConventions.OUTPUT_VALUE, toolCallResult);
+    set(attrs, SemanticConventions.OUTPUT_MIME_TYPE, getMimeType(toolCallResult));
+  }
 
   return attrs;
 };

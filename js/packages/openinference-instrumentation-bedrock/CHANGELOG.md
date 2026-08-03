@@ -1,5 +1,39 @@
 # @arizeai/openinference-instrumentation-bedrock
 
+## 0.4.19
+
+### Patch Changes
+
+- Updated dependencies [145e3c6]
+  - @arizeai/openinference-semantic-conventions@2.6.0
+  - @arizeai/openinference-core@2.4.1
+
+## 0.4.18
+
+### Patch Changes
+
+- bafd80e: Update Bedrock instrumentation to use @opentelemetry/core ^2.8.0, which includes the W3C Baggage denial-of-service fix.
+
+## 0.4.17
+
+### Patch Changes
+
+- 3f8daa5: Record Bedrock Nova `invoke_model` tool definitions verbatim on `tool.json_schema`, keeping the Converse tagged-union envelope (`toolSpec`/`systemTool`/`cachePoint`) instead of unwrapping to the inner `toolSpec` body and dropping non-`toolSpec` members. This matches the Converse extractor and the OpenAI/Anthropic instrumentors (which all record the whole provider-native tool element), preserves `systemTool`/`cachePoint` entries, and keeps the recorded schema replayable against the Converse API.
+
+## 0.4.16
+
+### Patch Changes
+
+- Updated dependencies [d0f5a88]
+  - @arizeai/openinference-core@2.4.0
+
+## 0.4.15
+
+### Patch Changes
+
+- Updated dependencies [1fe7927]
+  - @arizeai/openinference-core@2.3.0
+
 ## 0.4.14
 
 ### Patch Changes

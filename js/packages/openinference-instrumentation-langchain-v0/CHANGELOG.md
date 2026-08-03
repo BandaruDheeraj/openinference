@@ -1,5 +1,33 @@
 # @arizeai/openinference-instrumentation-langchain-v0
 
+## 0.0.16
+
+### Patch Changes
+
+- Updated dependencies [145e3c6]
+  - @arizeai/openinference-semantic-conventions@2.6.0
+  - @arizeai/openinference-core@2.4.1
+
+## 0.0.15
+
+### Patch Changes
+
+- d5a24f2: Bump @opentelemetry/core to 2.8.0 for LangChain v0 instrumentation to address the W3C baggage propagation security advisory.
+
+## 0.0.14
+
+### Patch Changes
+
+- Updated dependencies [d0f5a88]
+  - @arizeai/openinference-core@2.4.0
+
+## 0.0.13
+
+### Patch Changes
+
+- Updated dependencies [1fe7927]
+  - @arizeai/openinference-core@2.3.0
+
 ## 0.0.12
 
 ### Patch Changes

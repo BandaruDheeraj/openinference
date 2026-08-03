@@ -1,5 +1,33 @@
 # @arizeai/openinference-instrumentation-openai-agents
 
+## 0.2.4
+
+### Patch Changes
+
+- Updated dependencies [145e3c6]
+  - @arizeai/openinference-semantic-conventions@2.6.0
+  - @arizeai/openinference-core@2.4.1
+
+## 0.2.3
+
+### Patch Changes
+
+- 622d20f: Bump @opentelemetry/core to ^2.8.0 for OpenAI Agents instrumentation to address the W3C Baggage denial-of-service security advisory.
+
+## 0.2.2
+
+### Patch Changes
+
+- Updated dependencies [d0f5a88]
+  - @arizeai/openinference-core@2.4.0
+
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [1fe7927]
+  - @arizeai/openinference-core@2.3.0
+
 ## 0.2.0
 
 ### Minor Changes

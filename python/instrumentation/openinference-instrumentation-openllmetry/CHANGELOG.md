@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.12](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-openllmetry-v0.1.11...python-openinference-instrumentation-openllmetry-v0.1.12) (2026-07-30)
+
+
+### Documentation
+
+* link Arize AX alongside Phoenix across all READMEs ([#3330](https://github.com/Arize-ai/openinference/issues/3330)) ([0433526](https://github.com/Arize-ai/openinference/commit/0433526b048474195b4f354e5df6bfea2db4804d))
+
+## [0.1.11](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-openllmetry-v0.1.10...python-openinference-instrumentation-openllmetry-v0.1.11) (2026-06-30)
+
+
+### Bug Fixes
+
+* **openllmetry:** support immutable span attributes in opentelemetry-sdk &gt;= 1.37 ([#3305](https://github.com/Arize-ai/openinference/issues/3305)) ([8ff8c9b](https://github.com/Arize-ai/openinference/commit/8ff8c9b906c3b1f98c0c170fa0d13a02ee15c59d))
+
+## [0.1.10](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-openllmetry-v0.1.9...python-openinference-instrumentation-openllmetry-v0.1.10) (2026-06-24)
+
+
+### Bug Fixes
+
+* **openllmetry:** Handle Missing Tool Span Attributes ([#3252](https://github.com/Arize-ai/openinference/issues/3252)) ([f317434](https://github.com/Arize-ai/openinference/commit/f317434f848706fec241eda7ab53587bea53bdca))
+
 ## [0.1.9](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-openllmetry-v0.1.8...python-openinference-instrumentation-openllmetry-v0.1.9) (2026-05-18)
 
 
