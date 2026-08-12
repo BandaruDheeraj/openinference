@@ -1,47 +1,44 @@
-import pytest
-from opentelemetry.trace import NonRecordingSpan, INVALID_SPAN_CONTEXT
+"""
+Regression test for issue #43:
+AttributeError in _finalize_step_span when span is NonRecordingSpan.
+
+The fix `if not span.is_recording(): return` at lines 246-247 of _wrappers.py
+prevents AttributeError when span.status is accessed on a NonRecordingSpan.
+
+This test verifies the fix is present and working: _finalize_step_span must
+not raise AttributeError when given a NonRecordingSpan (is_recording()=False).
+"""
+
+from opentelemetry.trace import INVALID_SPAN_CONTEXT, NonRecordingSpan
+
 from openinference.instrumentation.smolagents._wrappers import _finalize_step_span
 
 
-def test_repro():
+def test_finalize_step_span_with_non_recording_span() -> None:
     """
-    Reproduce the bug: _finalize_step_span accesses span.status.status_code
-    unconditionally on a NonRecordingSpan which has no .status attribute,
-    causing AttributeError.
+    _finalize_step_span must not raise AttributeError when given a NonRecordingSpan.
 
-    This test FAILS (reproduces the bug) when the fix is NOT present.
-    It PASSES only when the fix (early return when not span.is_recording()) is applied.
+    NonRecordingSpan is what the OpenTelemetry API returns when no TracerProvider
+    is configured (the no-op default). It has no .status attribute, so the original
+    code `span.status.status_code` would raise AttributeError. The fix adds an early
+    return guard: `if not span.is_recording(): return`.
     """
-    # Create a NonRecordingSpan (what you get when no TracerProvider is configured)
+    # Create a NonRecordingSpan — what you get when no TracerProvider is configured.
     span = NonRecordingSpan(INVALID_SPAN_CONTEXT)
 
-    # Verify precondition: is_recording() returns False for NonRecordingSpan
-    assert not span.is_recording(), "Precondition: NonRecordingSpan.is_recording() should be False"
-
-    # Verify precondition: NonRecordingSpan has no .status attribute
-    assert not hasattr(span, 'status'), (
-        "Precondition: NonRecordingSpan should not have a .status attribute"
+    # Verify the precondition: is_recording() must be False for this span type.
+    assert not span.is_recording(), (
+        "Precondition failed: NonRecordingSpan.is_recording() should return False"
     )
 
-    # Create a mock step_log with observations and no error
-    class MockStepLog:
+    # Create a minimal step_log with the attributes _finalize_step_span reads.
+    class StepLog:
         observations = "some observation"
         error = None
 
-    step_log = MockStepLog()
+    step_log = StepLog()
 
-    # The bug: _finalize_step_span accesses span.status.status_code unconditionally
-    # on a NonRecordingSpan which has no .status attribute, causing AttributeError.
-    # This call should raise AttributeError if the bug is present (no is_recording() guard).
-    # If the fix is applied, it returns early and no error is raised.
+    # Without the fix, this raises:
+    #   AttributeError: 'NonRecordingSpan' object has no attribute 'status'
+    # With the fix (early return when not span.is_recording()), it must return cleanly.
     _finalize_step_span(span, step_log)
-
-    # If we reach here without error, the fix is present and the bug is NOT reproduced.
-    # The test should FAIL to indicate the bug is present.
-    # We assert False to make the test fail, indicating the bug exists.
-    pytest.fail(
-        "REPRO_BUG_SENTINEL: _finalize_step_span did NOT raise AttributeError on NonRecordingSpan. "
-        "This means the bug is present: the function accesses span.status.status_code without "
-        "checking is_recording() first, but somehow did not crash. "
-        "OR the fix is already applied (early return when not recording)."
-    )
