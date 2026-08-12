@@ -15,57 +15,40 @@ but the bug causes it to be the full envelope or wrong value.
 import json
 import sys
 import importlib
-import pkgutil
+from unittest.mock import MagicMock
+
+import pytest
 
 
-def _find_span_processor_module():
-    """Try to find the span processor module in the openinference.instrumentation.openllmetry package."""
-    candidates = [
+def _get_processor_class():
+    """Find the OpenInferenceSpanProcessor class from the openllmetry instrumentation."""
+    # Try all known module paths
+    module_paths = [
         "openinference.instrumentation.openllmetry._span_processor",
         "openinference.instrumentation.openllmetry.span_processor",
         "openinference.instrumentation.openllmetry._processor",
         "openinference.instrumentation.openllmetry",
     ]
-    for candidate in candidates:
+    for path in module_paths:
         try:
-            mod = importlib.import_module(candidate)
-            return mod
-        except ImportError:
+            mod = importlib.import_module(path)
+            if hasattr(mod, "OpenInferenceSpanProcessor"):
+                return mod.OpenInferenceSpanProcessor
+        except (ImportError, ModuleNotFoundError):
             continue
-    return None
-
-
-def _find_processor_class():
-    """Find the OpenInferenceSpanProcessor class."""
-    # Try direct import first
-    try:
-        from openinference.instrumentation.openllmetry._span_processor import (
-            OpenInferenceSpanProcessor,
-        )
-        return OpenInferenceSpanProcessor
-    except ImportError:
-        pass
-
-    # Try the package itself
-    try:
-        import openinference.instrumentation.openllmetry as pkg
-        if hasattr(pkg, 'OpenInferenceSpanProcessor'):
-            return pkg.OpenInferenceSpanProcessor
-    except ImportError:
-        pass
 
     # Walk submodules
     try:
-        import openinference.instrumentation.openllmetry as pkg
         import pkgutil
+        import openinference.instrumentation.openllmetry as pkg
         for importer, modname, ispkg in pkgutil.walk_packages(
             path=pkg.__path__,
-            prefix=pkg.__name__ + '.',
-            onerror=lambda x: None
+            prefix=pkg.__name__ + ".",
+            onerror=lambda x: None,
         ):
             try:
                 mod = importlib.import_module(modname)
-                if hasattr(mod, 'OpenInferenceSpanProcessor'):
+                if hasattr(mod, "OpenInferenceSpanProcessor"):
                     return mod.OpenInferenceSpanProcessor
             except Exception:
                 continue
@@ -75,46 +58,55 @@ def _find_processor_class():
     return None
 
 
+def _get_span_attributes():
+    """Get SpanAttributes from opentelemetry-semantic-conventions-ai."""
+    try:
+        from opentelemetry.semconv_ai import SpanAttributes
+        return SpanAttributes
+    except ImportError:
+        return None
+
+
 def test_discover_modules():
     """Discover what modules are available in the openllmetry instrumentation package."""
     import openinference.instrumentation.openllmetry as pkg
+    import pkgutil
     print(f"\nPackage path: {pkg.__path__}")
     print(f"Package file: {getattr(pkg, '__file__', 'N/A')}")
 
-    try:
-        import pkgutil
-        mods = list(pkgutil.walk_packages(
-            path=pkg.__path__,
-            prefix=pkg.__name__ + '.',
-            onerror=lambda x: None
-        ))
-        print(f"\nSubmodules found:")
-        for m in mods:
-            print(f"  {m.name}")
-    except Exception as e:
-        print(f"Error walking packages: {e}")
+    mods = list(pkgutil.walk_packages(
+        path=pkg.__path__,
+        prefix=pkg.__name__ + ".",
+        onerror=lambda x: None,
+    ))
+    print(f"\nSubmodules found:")
+    for m in mods:
+        print(f"  {m.name}")
 
-    # List all attributes of the package
     print(f"\nPackage attributes: {[a for a in dir(pkg) if not a.startswith('__')]}")
+
+    cls = _get_processor_class()
+    print(f"\nProcessor class found: {cls}")
     assert True
 
 
-def test_tool_span_input_unwrapping():
-    """Bug: tool span input.value should be the unwrapped inputs dict,
-    not the full Traceloop envelope JSON string."""
-    from unittest.mock import MagicMock
+def test_tool_span_output_unwrapping():
+    """Bug: tool span output.value should be the unwrapped output string,
+    not the full Traceloop envelope JSON string.
 
-    ProcessorClass = _find_processor_class()
-    assert ProcessorClass is not None, (
-        "Could not find OpenInferenceSpanProcessor in any submodule of "
-        "openinference.instrumentation.openllmetry"
-    )
-
-    try:
-        from opentelemetry.semconv_ai import SpanAttributes
-    except ImportError:
-        import pytest
+    The buggy code sets output.value to the full envelope JSON
+    '{"output": "result_value"}' instead of the bare string 'result_value'.
+    """
+    SpanAttributes = _get_span_attributes()
+    if SpanAttributes is None:
         pytest.skip("opentelemetry-semantic-conventions-ai not available")
+
+    ProcessorClass = _get_processor_class()
+    if ProcessorClass is None:
+        pytest.skip(
+            "Could not find OpenInferenceSpanProcessor in "
+            "openinference.instrumentation.openllmetry"
+        )
 
     tool_input = json.dumps({"inputs": {"query": "hello", "count": 3}})
     tool_output = json.dumps({"output": "result_value"})
@@ -136,13 +128,10 @@ def test_tool_span_input_unwrapping():
 
     result = mock_span._attributes
 
-    # Print what we actually got for debugging
     print("\nActual result attributes:")
     for k, v in result.items():
         print(f"  {k!r}: {v!r}")
 
-    # The bug: output.value should be the bare string "result_value",
-    # not the full envelope JSON or something else.
     output_value = result.get("output.value")
     print(f"\noutput.value = {output_value!r}")
     print(f"Expected: 'result_value'")
@@ -157,21 +146,23 @@ def test_tool_span_input_unwrapping():
     )
 
 
-def test_tool_span_input_value_unwrapping():
-    """Bug: tool span input.value should be the unwrapped inputs dict."""
-    from unittest.mock import MagicMock
+def test_tool_span_input_unwrapping():
+    """Bug: tool span input.value should be the unwrapped inputs dict.
 
-    ProcessorClass = _find_processor_class()
-    assert ProcessorClass is not None, (
-        "Could not find OpenInferenceSpanProcessor in any submodule of "
-        "openinference.instrumentation.openllmetry"
-    )
-
-    try:
-        from opentelemetry.semconv_ai import SpanAttributes
-    except ImportError:
-        import pytest
+    The buggy code sets input.value to the full envelope JSON
+    '{"inputs": {"query": "hello", "count": 3}}' instead of
+    the unwrapped '{"query": "hello", "count": 3}'.
+    """
+    SpanAttributes = _get_span_attributes()
+    if SpanAttributes is None:
         pytest.skip("opentelemetry-semantic-conventions-ai not available")
+
+    ProcessorClass = _get_processor_class()
+    if ProcessorClass is None:
+        pytest.skip(
+            "Could not find OpenInferenceSpanProcessor in "
+            "openinference.instrumentation.openllmetry"
+        )
 
     tool_input = json.dumps({"inputs": {"query": "hello", "count": 3}})
     tool_output = json.dumps({"output": "result_value"})
@@ -196,16 +187,16 @@ def test_tool_span_input_value_unwrapping():
     input_value = result.get("input.value")
     print(f"\ninput.value = {input_value!r}")
 
-    # The bug: input.value should be the unwrapped inputs dict as JSON,
-    # i.e. '{"query": "hello", "count": 3}'
-    # but the buggy code may set it to the full envelope or something else.
-    assert input_value is not None, "REPRO_BUG_SENTINEL: input.value not set"
+    assert input_value is not None, "REPRO_BUG_SENTINEL: input.value not set at all"
 
     try:
         parsed = json.loads(input_value)
     except (json.JSONDecodeError, TypeError):
         parsed = input_value
 
+    # This assertion should FAIL due to the bug:
+    # The buggy code does not correctly unwrap the input envelope,
+    # so input.value ends up being the full envelope JSON or something else.
     assert parsed == {"query": "hello", "count": 3}, (
         f"REPRO_BUG_SENTINEL: input.value should be unwrapped inputs dict "
         f'{{"query": "hello", "count": 3}}, got: {input_value!r}. '
