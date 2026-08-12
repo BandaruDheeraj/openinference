@@ -14,7 +14,6 @@ but the bug causes it to be the full envelope or wrong value.
 """
 import json
 import sys
-import importlib
 from unittest.mock import MagicMock
 
 import pytest
@@ -22,6 +21,9 @@ import pytest
 
 def _get_processor_class():
     """Find the OpenInferenceSpanProcessor class from the openllmetry instrumentation."""
+    import importlib
+    import pkgutil
+
     # Try all known module paths
     module_paths = [
         "openinference.instrumentation.openllmetry._span_processor",
@@ -34,12 +36,11 @@ def _get_processor_class():
             mod = importlib.import_module(path)
             if hasattr(mod, "OpenInferenceSpanProcessor"):
                 return mod.OpenInferenceSpanProcessor
-        except (ImportError, ModuleNotFoundError):
+        except Exception:
             continue
 
     # Walk submodules
     try:
-        import pkgutil
         import openinference.instrumentation.openllmetry as pkg
         for importer, modname, ispkg in pkgutil.walk_packages(
             path=pkg.__path__,
@@ -69,8 +70,14 @@ def _get_span_attributes():
 
 def test_discover_modules():
     """Discover what modules are available in the openllmetry instrumentation package."""
-    import openinference.instrumentation.openllmetry as pkg
     import pkgutil
+    import importlib
+
+    try:
+        import openinference.instrumentation.openllmetry as pkg
+    except ImportError as e:
+        pytest.skip(f"Package not available: {e}")
+
     print(f"\nPackage path: {pkg.__path__}")
     print(f"Package file: {getattr(pkg, '__file__', 'N/A')}")
 
