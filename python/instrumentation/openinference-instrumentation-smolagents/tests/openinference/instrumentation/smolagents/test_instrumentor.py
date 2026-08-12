@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from opentelemetry import trace as trace_api
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
+from opentelemetry.trace import INVALID_SPAN_CONTEXT, NonRecordingSpan, SpanContext, TraceFlags
 from opentelemetry.util._importlib_metadata import entry_points
 from smolagents import LiteLLMModel, OpenAIServerModel, Tool, tool
 from smolagents.agents import (  # type: ignore[import-untyped]
@@ -61,6 +61,36 @@ def assert_no_attribute_error() -> Iterator[None]:
         yield
     except AttributeError as e:
         pytest.fail(f"Unexpected AttributeError: {e}")
+
+
+def test_finalize_step_span_with_non_recording_span() -> None:
+    """
+    Regression test for issue #43: _finalize_step_span must not raise AttributeError
+    when given a NonRecordingSpan (is_recording() == False).
+
+    NonRecordingSpan is what the OpenTelemetry API returns when no TracerProvider is
+    configured (the no-op default). It has no .status attribute, so the original code
+    `span.status.status_code` would raise AttributeError. The fix adds an early return
+    guard: `if not span.is_recording(): return` at lines 246-247 of _wrappers.py.
+    """
+    span = NonRecordingSpan(INVALID_SPAN_CONTEXT)
+
+    # Verify the precondition: is_recording() must be False for this span type.
+    assert not span.is_recording(), (
+        "Precondition failed: NonRecordingSpan.is_recording() should return False"
+    )
+
+    # Create a minimal step_log with the attributes _finalize_step_span reads.
+    class StepLog:
+        observations = "some observation"
+        error = None
+
+    step_log = StepLog()
+
+    # Without the fix, this raises:
+    #   AttributeError: 'NonRecordingSpan' object has no attribute 'status'
+    # With the fix (early return when not span.is_recording()), it must return cleanly.
+    _finalize_step_span(span, step_log)
 
 
 class TestFinalizeStepSpanWithDroppedSpan:
