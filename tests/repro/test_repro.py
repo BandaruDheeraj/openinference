@@ -16,6 +16,41 @@ except ImportError:
     HAS_SEMCONV = False
 
 
+def test_repro_inspect_actual_behavior():
+    """
+    This test inspects what _map_generic_span actually returns for a retriever-like span
+    and fails with a detailed message showing the bug.
+    """
+    if not HAS_MAP_GENERIC_SPAN:
+        pytest.skip("_map_generic_span not available")
+
+    documents = [
+        {"page_content": "Paris is the capital of France.", "metadata": {"source": "wiki"}, "score": 0.95},
+        {"page_content": "The Eiffel Tower is in Paris.", "metadata": {}, "id": "doc2"},
+    ]
+    attrs = {
+        "traceloop.span.kind": "task",
+        "gen_ai.operation.name": "vector_db_retrieve",
+        "gen_ai.task.input": json.dumps({"query": "What is the capital of France?"}),
+        "gen_ai.task.output": json.dumps({"documents": documents}),
+    }
+
+    result = _map_generic_span(attrs, span_name="retriever_span")
+
+    # Check if retrieval document keys are present at all
+    retrieval_keys = [k for k in result.keys() if "retrieval" in k.lower() or "document" in k.lower()]
+    span_kind = result.get("openinference.span.kind")
+
+    # The bug: retrieval documents are not properly mapped and/or span kind is wrong
+    # Force a failure that shows what the actual (buggy) output is
+    assert False, (
+        f"REPRO_BUG_SENTINEL: Actual span kind={span_kind!r}, "
+        f"retrieval_keys={retrieval_keys!r}, "
+        f"all_keys={list(result.keys())!r}. "
+        f"Full result: {result!r}"
+    )
+
+
 def test_repro_span_kind_mapping():
     """
     Reproduce the bug where retriever spans (gen_ai.operation.name='vector_db_retrieve')
@@ -73,39 +108,4 @@ def test_repro_span_kind_mapping():
     assert result.get(sc.SpanAttributes.INPUT_VALUE) == "What is the capital of France?", (
         f"REPRO_BUG_SENTINEL: Expected input.value to be the query string, got: "
         f"{result.get(sc.SpanAttributes.INPUT_VALUE)!r}"
-    )
-
-
-def test_repro_inspect_actual_behavior():
-    """
-    This test inspects what _map_generic_span actually returns for a retriever-like span
-    and fails with a detailed message showing the bug.
-    """
-    if not HAS_MAP_GENERIC_SPAN:
-        pytest.skip("_map_generic_span not available")
-
-    documents = [
-        {"page_content": "Paris is the capital of France.", "metadata": {"source": "wiki"}, "score": 0.95},
-        {"page_content": "The Eiffel Tower is in Paris.", "metadata": {}, "id": "doc2"},
-    ]
-    attrs = {
-        "traceloop.span.kind": "task",
-        "gen_ai.operation.name": "vector_db_retrieve",
-        "gen_ai.task.input": json.dumps({"query": "What is the capital of France?"}),
-        "gen_ai.task.output": json.dumps({"documents": documents}),
-    }
-
-    result = _map_generic_span(attrs, span_name="retriever_span")
-
-    # Check if retrieval document keys are present at all
-    retrieval_keys = [k for k in result.keys() if "retrieval" in k.lower() or "document" in k.lower()]
-    span_kind = result.get("openinference.span.kind")
-
-    # The bug: retrieval documents are not properly mapped and/or span kind is wrong
-    # Force a failure that shows what the actual (buggy) output is
-    assert False, (
-        f"REPRO_BUG_SENTINEL: Actual span kind={span_kind!r}, "
-        f"retrieval_keys={retrieval_keys!r}, "
-        f"all_keys={list(result.keys())!r}. "
-        f"Full result: {result!r}"
     )
