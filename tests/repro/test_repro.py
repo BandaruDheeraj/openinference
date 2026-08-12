@@ -2,12 +2,34 @@ import json
 import pytest
 from unittest.mock import MagicMock, patch
 
-# Try to import the span processor to understand the actual bug
+# Try multiple possible import paths for the span processor
+_map_generic_span = None
+_import_error = None
+
 try:
     from openinference.instrumentation.openllmetry._span_processor import _map_generic_span
-    HAS_MAP_GENERIC_SPAN = True
-except ImportError:
-    HAS_MAP_GENERIC_SPAN = False
+except ImportError as e:
+    _import_error = str(e)
+
+if _map_generic_span is None:
+    try:
+        import openinference.instrumentation.openllmetry as _pkg
+        import importlib, pkgutil
+        # Try to find the function in submodules
+        for _importer, _modname, _ispkg in pkgutil.walk_packages(
+            path=_pkg.__path__,
+            prefix=_pkg.__name__ + '.',
+            onerror=lambda x: None
+        ):
+            try:
+                _mod = importlib.import_module(_modname)
+                if hasattr(_mod, '_map_generic_span'):
+                    _map_generic_span = _mod._map_generic_span
+                    break
+            except Exception:
+                pass
+    except Exception as e:
+        _import_error = str(e)
 
 try:
     import openinference.semconv.trace as sc
@@ -21,8 +43,8 @@ def test_repro_inspect_actual_behavior():
     This test inspects what _map_generic_span actually returns for a retriever-like span
     and fails with a detailed message showing the bug.
     """
-    if not HAS_MAP_GENERIC_SPAN:
-        pytest.skip("_map_generic_span not available")
+    if _map_generic_span is None:
+        pytest.skip(f"_map_generic_span not available: {_import_error}")
 
     documents = [
         {"page_content": "Paris is the capital of France.", "metadata": {"source": "wiki"}, "score": 0.95},
@@ -57,8 +79,8 @@ def test_repro_span_kind_mapping():
     are incorrectly mapped. The test asserts the CORRECT behavior and expects it to FAIL
     because the buggy code does not implement it correctly.
     """
-    if not HAS_MAP_GENERIC_SPAN:
-        pytest.skip("_map_generic_span not available")
+    if _map_generic_span is None:
+        pytest.skip(f"_map_generic_span not available: {_import_error}")
     if not HAS_SEMCONV:
         pytest.skip("openinference semconv not available")
 
