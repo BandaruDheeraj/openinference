@@ -13,32 +13,109 @@ should produce output.value = "result_value" (bare string),
 but the bug causes it to be the full envelope or wrong value.
 """
 import json
-import inspect
-from unittest.mock import MagicMock, patch
-
-from opentelemetry.semconv_ai import SpanAttributes
-import openinference.semconv.trace as sc
+import sys
+import importlib
+import pkgutil
 
 
-def _get_mapped_attributes(attrs: dict) -> dict:
-    """Run the span through the processor and return the resulting attributes."""
-    from openinference.instrumentation.openllmetry._span_processor import (
-        OpenInferenceSpanProcessor,
-    )
+def _find_span_processor_module():
+    """Try to find the span processor module in the openinference.instrumentation.openllmetry package."""
+    candidates = [
+        "openinference.instrumentation.openllmetry._span_processor",
+        "openinference.instrumentation.openllmetry.span_processor",
+        "openinference.instrumentation.openllmetry._processor",
+        "openinference.instrumentation.openllmetry",
+    ]
+    for candidate in candidates:
+        try:
+            mod = importlib.import_module(candidate)
+            return mod
+        except ImportError:
+            continue
+    return None
 
-    mock_span = MagicMock()
-    mock_span._attributes = dict(attrs)
-    mock_span.name = "test_span"
 
-    processor = OpenInferenceSpanProcessor()
-    processor.on_end(mock_span)
+def _find_processor_class():
+    """Find the OpenInferenceSpanProcessor class."""
+    # Try direct import first
+    try:
+        from openinference.instrumentation.openllmetry._span_processor import (
+            OpenInferenceSpanProcessor,
+        )
+        return OpenInferenceSpanProcessor
+    except ImportError:
+        pass
 
-    return mock_span._attributes
+    # Try the package itself
+    try:
+        import openinference.instrumentation.openllmetry as pkg
+        if hasattr(pkg, 'OpenInferenceSpanProcessor'):
+            return pkg.OpenInferenceSpanProcessor
+    except ImportError:
+        pass
+
+    # Walk submodules
+    try:
+        import openinference.instrumentation.openllmetry as pkg
+        import pkgutil
+        for importer, modname, ispkg in pkgutil.walk_packages(
+            path=pkg.__path__,
+            prefix=pkg.__name__ + '.',
+            onerror=lambda x: None
+        ):
+            try:
+                mod = importlib.import_module(modname)
+                if hasattr(mod, 'OpenInferenceSpanProcessor'):
+                    return mod.OpenInferenceSpanProcessor
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    return None
+
+
+def test_discover_modules():
+    """Discover what modules are available in the openllmetry instrumentation package."""
+    import openinference.instrumentation.openllmetry as pkg
+    print(f"\nPackage path: {pkg.__path__}")
+    print(f"Package file: {getattr(pkg, '__file__', 'N/A')}")
+
+    try:
+        import pkgutil
+        mods = list(pkgutil.walk_packages(
+            path=pkg.__path__,
+            prefix=pkg.__name__ + '.',
+            onerror=lambda x: None
+        ))
+        print(f"\nSubmodules found:")
+        for m in mods:
+            print(f"  {m.name}")
+    except Exception as e:
+        print(f"Error walking packages: {e}")
+
+    # List all attributes of the package
+    print(f"\nPackage attributes: {[a for a in dir(pkg) if not a.startswith('__')]}")
+    assert True
 
 
 def test_tool_span_input_unwrapping():
     """Bug: tool span input.value should be the unwrapped inputs dict,
     not the full Traceloop envelope JSON string."""
+    from unittest.mock import MagicMock
+
+    ProcessorClass = _find_processor_class()
+    assert ProcessorClass is not None, (
+        "Could not find OpenInferenceSpanProcessor in any submodule of "
+        "openinference.instrumentation.openllmetry"
+    )
+
+    try:
+        from opentelemetry.semconv_ai import SpanAttributes
+    except ImportError:
+        import pytest
+        pytest.skip("opentelemetry-semantic-conventions-ai not available")
+
     tool_input = json.dumps({"inputs": {"query": "hello", "count": 3}})
     tool_output = json.dumps({"output": "result_value"})
     tool_name = "my_search_tool"
@@ -50,7 +127,14 @@ def test_tool_span_input_unwrapping():
         SpanAttributes.TRACELOOP_ENTITY_OUTPUT: tool_output,
     }
 
-    result = _get_mapped_attributes(attrs)
+    mock_span = MagicMock()
+    mock_span._attributes = dict(attrs)
+    mock_span.name = "test_span"
+
+    processor = ProcessorClass()
+    processor.on_end(mock_span)
+
+    result = mock_span._attributes
 
     # Print what we actually got for debugging
     print("\nActual result attributes:")
@@ -75,6 +159,20 @@ def test_tool_span_input_unwrapping():
 
 def test_tool_span_input_value_unwrapping():
     """Bug: tool span input.value should be the unwrapped inputs dict."""
+    from unittest.mock import MagicMock
+
+    ProcessorClass = _find_processor_class()
+    assert ProcessorClass is not None, (
+        "Could not find OpenInferenceSpanProcessor in any submodule of "
+        "openinference.instrumentation.openllmetry"
+    )
+
+    try:
+        from opentelemetry.semconv_ai import SpanAttributes
+    except ImportError:
+        import pytest
+        pytest.skip("opentelemetry-semantic-conventions-ai not available")
+
     tool_input = json.dumps({"inputs": {"query": "hello", "count": 3}})
     tool_output = json.dumps({"output": "result_value"})
     tool_name = "my_search_tool"
@@ -86,7 +184,14 @@ def test_tool_span_input_value_unwrapping():
         SpanAttributes.TRACELOOP_ENTITY_OUTPUT: tool_output,
     }
 
-    result = _get_mapped_attributes(attrs)
+    mock_span = MagicMock()
+    mock_span._attributes = dict(attrs)
+    mock_span.name = "test_span"
+
+    processor = ProcessorClass()
+    processor.on_end(mock_span)
+
+    result = mock_span._attributes
 
     input_value = result.get("input.value")
     print(f"\ninput.value = {input_value!r}")
@@ -103,33 +208,6 @@ def test_tool_span_input_value_unwrapping():
 
     assert parsed == {"query": "hello", "count": 3}, (
         f"REPRO_BUG_SENTINEL: input.value should be unwrapped inputs dict "
-        f"{{\"query\": \"hello\", \"count\": 3}}, got: {input_value!r}. "
+        f'{{"query": "hello", "count": 3}}, got: {input_value!r}. '
         f"The bug is that the Traceloop input envelope is not correctly unwrapped."
     )
-
-
-def test_inspect_map_generic_span_source():
-    """Inspect the actual source of _map_generic_span to understand the bug."""
-    try:
-        from openinference.instrumentation.openllmetry._span_processor import (
-            _map_generic_span,
-        )
-        src = inspect.getsource(_map_generic_span)
-        print("\n_map_generic_span source:")
-        print(src)
-    except (ImportError, TypeError) as e:
-        print(f"Could not inspect: {e}")
-
-    # Also inspect the processor
-    try:
-        from openinference.instrumentation.openllmetry._span_processor import (
-            OpenInferenceSpanProcessor,
-        )
-        src = inspect.getsource(OpenInferenceSpanProcessor)
-        print("\nOpenInferenceSpanProcessor source:")
-        print(src)
-    except (ImportError, TypeError) as e:
-        print(f"Could not inspect processor: {e}")
-
-    # This test always passes — it's just for debugging
-    assert True
