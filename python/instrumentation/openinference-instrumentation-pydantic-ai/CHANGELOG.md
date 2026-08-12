@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.20](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-pydantic-ai-v0.1.19...python-openinference-instrumentation-pydantic-ai-v0.1.20) (2026-08-12)
+
+
+### Bug Fixes
+
+* pydantic io should include tool calls in input.value/output.value ([#3529](https://github.com/Arize-ai/openinference/issues/3529)) ([4249a33](https://github.com/Arize-ai/openinference/commit/4249a33d6e35772058f4b68af47c22d28267b338))
+
+## [0.1.19](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-pydantic-ai-v0.1.18...python-openinference-instrumentation-pydantic-ai-v0.1.19) (2026-08-07)
+
+
+### Bug Fixes
+
+* bump openinference-semantic-conventions minimum to &gt;=0.1.31 ([#3474](https://github.com/Arize-ai/openinference/issues/3474)) ([5398a80](https://github.com/Arize-ai/openinference/commit/5398a80e9038ca53035cf61255992ca9d531b036))
+
 ## [0.1.18](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-pydantic-ai-v0.1.17...python-openinference-instrumentation-pydantic-ai-v0.1.18) (2026-07-30)
 
 

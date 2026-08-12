@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.20](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-google-adk-v0.1.19...python-openinference-instrumentation-google-adk-v0.1.20) (2026-08-12)
+
+
+### Features
+
+* **google-adk:** Add fallback output capture and agent description to agent spans ([#2759](https://github.com/Arize-ai/openinference/issues/2759)) ([91f1848](https://github.com/Arize-ai/openinference/commit/91f18488d6f03c9ecf442c7f917853cc191959bc))
+
+## [0.1.19](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-google-adk-v0.1.18...python-openinference-instrumentation-google-adk-v0.1.19) (2026-08-07)
+
+
+### Bug Fixes
+
+* bump openinference-semantic-conventions minimum to &gt;=0.1.31 ([#3474](https://github.com/Arize-ai/openinference/issues/3474)) ([5398a80](https://github.com/Arize-ai/openinference/commit/5398a80e9038ca53035cf61255992ca9d531b036))
+
 ## [0.1.18](https://github.com/Arize-ai/openinference/compare/python-openinference-instrumentation-google-adk-v0.1.17...python-openinference-instrumentation-google-adk-v0.1.18) (2026-07-30)
 
 
