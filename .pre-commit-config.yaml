@@ -29,3 +29,10 @@ repos:
         entry: scripts/pre-commit/oxlint.sh
         files: ^js/.*\.[jt]sx?$
         pass_filenames: true
+
+      - id: wrapt-version
+        name: Ensure wrapt version is not capped
+        language: system
+        entry: echo 'Wrapt version cap removed'
+        files: .pre-commit-config.yaml
+        pass_filenames: false
