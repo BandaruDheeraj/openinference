@@ -29,3 +29,10 @@ repos:
         entry: scripts/pre-commit/oxlint.sh
         files: ^js/.*\.[jt]sx?$
         pass_filenames: true
+
+      - id: check-wrapt-version
+        name: Check wrapt version
+        language: python
+        entry: python -c 'import pkg_resources; pkg_resources.require("wrapt>=2")'
+        files: \.py$
+        pass_filenames: false
